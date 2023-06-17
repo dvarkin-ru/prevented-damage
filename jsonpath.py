@@ -2,10 +2,18 @@ import json
 import tkinter
 import math
 import time
+from operator import itemgetter
+
+
+scale = 20 # Масштаб здания в tkinter
+choosen_door = 1 # Дверь, в которую входит нарушитель
+intruder_type = 2 # Тип нарушителя
+i = 1000000 # Кол-во допустимых входов в рекурсивную функцию
+
+old_i = i
 
 with open("udsu_b3_L3_v1_190701.json") as file:
 	j = json.load(file)
-j_clear = j.copy()
 
 def get_el(el_id):
     ''' Находит элемент по Id '''
@@ -13,6 +21,14 @@ def get_el(el_id):
         for e in lvl['BuildElement']:
             if e['Id'] == el_id:
                 return e
+
+def get_door(room1, room2):
+    if room1 == room2:
+        return
+    for door1 in room1["Output"]:
+        for door2 in room2["Output"]:
+            if door1==door2:
+                return get_el(door1)
 
 def is_el_on_lvl(el, lvl):
     ''' Принадлежит ли элемент этажу '''
@@ -44,31 +60,49 @@ def bfs(v, Q):
             i["GLevel"] = v["GLevel"]+1
             x1, y1, x2, y2 = *i["XY"][0][0], *i["XY"][0][2]
             if i["Type"] == 8: # имитируем людей в крайних кабинетах
-                i["NumPeople"] = (abs(x2-x1) * abs(y2-y1)) # количество людей = примерная площадь
+                i["NumPeople"] = int(abs(x2-x1) * abs(y2-y1)) # количество людей = примерная площадь
             max_lvl = max(max_lvl, i["GLevel"])
     while Q:
         bfs(Q.pop(0), Q)
 
-i = 100000
-K = 0.9
 
+def dict_peak(d, key, reverse):
+    ''' Возвращает крайние элементы словаря d по ключу key,
+    это минимальные элементы если reverse == False, иначе максимальные '''
+    d = sorted(d, key=itemgetter(key), reverse=reverse)
+    return [i for i in d if i[key] == d[0][key]]
 
-def step(out, vis):
+def step_variants(room, vis, curr_path):
+    if intruder_type == 1:
+        return [n for n in neighbours(room) if n["GLevel"] == room["GLevel"]+1]
+    elif intruder_type == 2:
+        # Варианты перехода во все непосещённые помещения
+        v = [n for n in neighbours(room) if vis[n["Id"]] == 0]
+        if v: # если такие находятся, из них выбираем самые высокоуровневые, а из последних - самые людные
+            return dict_peak(dict_peak(v, "GLevel", True), "NumPeople", True)
+        # если непосещённых нет, идём назад
+        for back in reversed(curr_path):
+            door = get_door(room, back)
+            if door and vis[door["Id"]] <= 1:
+                return [back,]
+        return [] # ???
+
+def step(from_room, to_room, vis, curr_path):
     ''' Рекурсивная функция '''
     global i
     i -= 1
-    vis[out["Id"]] += 1
-    eff = out.get('NumPeople')*(K**vis[out["Id"]]) if out.get('NumPeople') else 0
+    door = from_room if from_room["Sign"] == 'DoorWayOut' else get_door(from_room, to_room) # для входа
+    vis[door["Id"]] += 1
+    vis[to_room["Id"]] += 1
+    eff = to_room['NumPeople']
     # Условия прекращения рекурсии
-    if vis[out["Id"]] >= 3 or out.get('GLevel') == max_lvl or out['Sign'] == 'DoorWayOut' or i < 1:
-        return [out,], eff
-    variants = [step(next_out, vis.copy()) for next_out in neighbours(out)]
-    path, max_eff= variants[0]
+    if (vis[door["Id"]] >= 3) or (to_room["GLevel"] == max_lvl) or (i < 1):
+        print(i, end = '   \r') # чтобы не так часто
+        return curr_path+[to_room], eff
+    variants = [step(to_room, next_to_room, vis.copy(), curr_path+[to_room]) for next_to_room in step_variants(to_room, vis, curr_path+[to_room])]
     # Выбираем самый эффективный вариант
-    for var in variants:
-        if var[1] > max_eff:
-            path, max_eff = var
-    return path+[out,], max_eff + eff
+    path, max_eff = max(variants, key = itemgetter(1)) if variants else (curr_path, 0)
+    return path, max_eff + eff
 
 
 # ищем входные двери
@@ -78,7 +112,8 @@ for el in j['Level'][0]['BuildElement']:
         out_doors.append(el)
 
 # заходим в одну, делаем помещение за ней верхушкой
-top_room = get_el(out_doors[0]['Output'][0])
+top_door = out_doors[choosen_door]
+top_room = get_el(top_door['Output'][0])
 top_room["GLevel"] = 0
 
 bfs(top_room, [])
@@ -89,10 +124,14 @@ for lvl in j['Level']:
 
 # находим лучшие путь и эффективность пути
 t1 = time.time()
-best_path, best_eff = step(top_room, visits)
-print("t1", t1, " t2", time.time(), "delta", time.time()-t1)
+best_path, best_eff = step(get_el(top_door["Id"]), top_room, visits, [])
+t2 = time.time()
 if i < 1:
-    print("Interrupted")
+    print("[Interrupted]")
+print("Time:", t2-t1, " i:", old_i-i)
+print(int((old_i-i)/(t2-t1)), "steps per second")
+
+# print(*[str(v["Id"])+'\n' for v in best_path])
 
 # находим offset для canvas
 min_x, min_y, max_x, max_y = 0, 0, 0, 0
@@ -105,9 +144,6 @@ for lvl in j['Level']:
                 max_x = max(max_x, x)
                 max_y = max(max_y, y)
 offset_x, offset_y = -min_x, -min_y
-
-# Масштаб
-scale = 20
 
 def crd(x, y):
     ''' Перевод из координат здания в координаты canvas '''
@@ -144,11 +180,13 @@ for lvl, c in cs:
         for xy in el['XY']:
             c.create_polygon([crd(x,y) for x, y in xy[:-1]], fill=colors[el['Sign']], outline='black')
         if el["Sign"] == "Room":
-            c.create_text(cntr(el['XY']), text=el.get('GLevel'))
+            c.create_text(cntr(el['XY']), text=str(int(el.get('GLevel')))+"("+str(int(el.get('NumPeople')))+")")
 
     for i in range(len(best_path)-1):
         if is_el_on_lvl(best_path[i], lvl) or is_el_on_lvl(best_path[i+1], lvl):
             c.create_line(cntr(best_path[i]['XY']), cntr(best_path[i+1]['XY']), arrow=tkinter.LAST)
+    if is_el_on_lvl(best_path[-1], lvl):
+        c.create_text([i+12 for i in cntr(best_path[-1]['XY'])], text="BREAK") # окончание пути, смещённое на 12 точек
 
 
 top.mainloop()
