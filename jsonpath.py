@@ -4,10 +4,13 @@ import math
 import time
 from operator import itemgetter
 
+import sys
+sys.setrecursionlimit(4000)
+
 scale = 30 # Масштаб здания в tkinter
 choosen_door = 1 # Дверь, в которую входит нарушитель
 intruder_type = 2 # Тип нарушителя
-i = 1000 # Кол-во допустимых входов в рекурсивную функцию
+i = 100000 # Кол-во допустимых входов в рекурсивную функцию
 NumPeople = 807 # Количесвто всех людей в здании
 
 totalArea = []
@@ -113,16 +116,14 @@ def step_variants(room, vis, curr_path):
         return [] # ???
 
 
-killCount = []
-
 def step(from_room, to_room, vis, curr_path):
     ''' Рекурсивная функция '''
     global i
     i -= 1
     door = from_room if from_room["Sign"] == 'DoorWayOut' else get_door(from_room, to_room) # для входа
     vis[door["Id"]] += 1
+    eff = to_room['NumPeople'] if vis[to_room["Id"]] == 0 else 0
     vis[to_room["Id"]] += 1
-    eff = to_room['NumPeople']
     # Условия прекращения рекурсии
     if (vis[door["Id"]] >= 3) or (to_room["GLevel"] == max_lvl) or (i < 1):
         print(i, end = '   \r') # чтобы не так часто
@@ -155,7 +156,7 @@ for lvl in j['Level']:
 
 # находим лучшие путь и эффективность пути
 t1 = time.time()
-best_path, best_eff = step(get_el(top_door["Id"]), top_room, visits, [])
+best_path, best_eff = step(top_door, top_room, visits, [])
 t2 = time.time()
 if i < 1:
     print("[Interrupted]")
@@ -185,6 +186,9 @@ def cntr(coords):
     xy = [crd(xy['x'], xy['y']) for xy in coords]
     return sum((x for x, y in xy))/len(xy), sum((y for x, y in xy))/len(xy)
 
+def cntr_real(coords):
+    ''' Центр в координатах здания по координатам здания '''
+    return sum((xy['x'] for xy in coords))/len(coords), sum((xy['y'] for xy in coords))/len(coords)
 
 # Tkinter окно для каждого этажа
 cs = []
@@ -208,6 +212,18 @@ print(f"totalArea {sum(totalArea)}")
 
 time = []
 lenPath = []
+door_len_path = 0
+for i in range(len(best_path)-2):
+    door1, door2 = get_door(best_path[i], best_path[i+1]), get_door(best_path[i+1], best_path[i+2])
+    if door1 == door2:
+        # зашёл в комнату и вышел из неё
+        door_len_path += 1 # метр, например
+    else:
+        # расстояние между средними точками дверей
+        (x1, y1), (x2, y2) = cntr_real(door1['XY'][0]["points"]), cntr_real(door2['XY'][0]["points"])
+        door_len_path += math.sqrt((x2-x1)**2+(y2-y1)**2)/1000
+print("Длина пути по дверям:", door_len_path)
+
 for path in best_path:
     time.append(math.sqrt(path['Area'])/100 + 0.05)
     lenPath.append(math.sqrt(path['Area']))
@@ -215,7 +231,7 @@ for path in best_path:
 print(f'Длина пути {sum(lenPath)}')
 
 print(f'timePath {sum(time)}')
-print(f'Убито {sum(killCount)}')
+print(f'Поражено {best_eff}')
 print(f'len {len(best_path)}')
 
 
