@@ -2,14 +2,14 @@ import json
 import tkinter
 import math
 import time
-from operator import itemgetter
+from operator import itemgetter, truediv
 
 import sys
 sys.setrecursionlimit(4000)
 
-scale = 30 # Масштаб здания в tkinter
+scale = 20 # Масштаб здания в tkinter
 choosen_door = 1 # Дверь, в которую входит нарушитель
-intruder_type = 2 # Тип нарушителя
+intruder_type = 3 # Тип нарушителя
 i = 100000 # Кол-во допустимых входов в рекурсивную функцию
 NumPeople = 807 # Количесвто всех людей в здании
 
@@ -94,6 +94,38 @@ def bfs(v, Q):
     while Q:
         bfs(Q.pop(0), Q)
 
+def cntr_real(coords):
+    ''' Центр в координатах здания '''
+    xy = coords['XY'][0]["points"]
+    return sum((c['x'] for c in xy))/len(xy), sum((c['y'] for c in xy))/len(xy)
+
+def distance(ob1, ob2):
+    if not ob1:
+        print("NO OB1, program will crashed NOW")
+    if not ob2:
+        print("NO OB2, program will crashed NOW")
+    (x1, y1), (x2, y2) = cntr_real(ob1), cntr_real(ob2)
+    return math.sqrt((x2-x1)**2+(y2-y1)**2)
+
+vision_lvl = 3
+
+def vision(room, vis, curr_path, lvl = 0):
+    if len(curr_path) == 2: # в пути только 2 помещения, не можем взять 2 двери
+        ob1 = top_room
+    elif len(curr_path) >= 3:
+        ob1 = get_door(curr_path[-2], curr_path[-3])
+    else:
+        print("ERROR! Intruder outside?")
+        sys.exit()
+    ob2 = get_door(curr_path[-1], curr_path[-2])
+    curr_room_dist = distance(ob1, ob2)
+    if lvl >= vision_lvl:
+        return room["NumPeople"], curr_room_dist
+    vis[room["Id"]] += 1
+    v = [vision(n, vis.copy(), curr_path+[n], lvl+1) for n in neighbours(room) if vis[n["Id"]] == 0]
+    pep, dist = sum((p for p, d in v)), sum((d for p, d in v))
+    return pep+room["NumPeople"], dist+curr_room_dist
+
 def dict_peak(d, key, reverse):
     ''' Возвращает крайние элементы словаря d по ключу key,
     это минимальные элементы если reverse == False, иначе максимальные '''
@@ -103,16 +135,31 @@ def dict_peak(d, key, reverse):
 def step_variants(room, vis, curr_path):
     if intruder_type == 1:
         return [n for n in neighbours(room) if n["GLevel"] == room["GLevel"]+1]
-    elif intruder_type == 2:
+    elif intruder_type in (2, 3):
         # Варианты перехода во все непосещённые помещения
         v = [n for n in neighbours(room) if vis[n["Id"]] == 0]
-        if v: # если такие находятся, из них выбираем самые высокоуровневые, а из последних - самые людные
-            return dict_peak(dict_peak(v, "GLevel", True), "NumPeople", True)
-        # если непосещённых нет, идём назад
+        if intruder_type == 3:
+            # Нарушитель типа 3 предпочтёт путь с наибольшим уроном за время
+            visible = [(truediv(*vision(n, vis.copy(), curr_path+[n])), n) for n in v]
+        else:
+            # Нарушитель типа 2 предпочтёт путь с наибольшим уроном в принципе
+            visible = [(vision(n, vis.copy(), curr_path+[n])[0], n) for n in v]
+        if visible: # если такие находятся
+            max_eff = max(visible, key=itemgetter(0))
+            if max_eff[0] > 0: # если хотя бы на одном из них есть люди
+                return [max_eff[1]]
+            else:
+                # выбираем высокоуровневые варианты
+                hi_lev = dict_peak(v, "GLevel", True) #[max(v, key=itemgetter("GLevel"))]
+                # из них можно выбрать вариант с наиболее быстро преодолеваемыми дверными проёмами
+                # а пока выберем вариант с наибольшим возможным расстоянием (наименьшее кол-во дверей за расстояние)
+                return [max(((vision(n, vis.copy(), curr_path+[n])[1], n) for n in hi_lev), key=itemgetter(0))[1]]
+
+        # если непосещённых нет, идём назад, но не назад в назад
         for back in reversed(curr_path):
             door = get_door(room, back)
             if door and vis[door["Id"]] <= 1:
-                return [back,]
+                return [back]
         return [] # ???
 
 
@@ -130,7 +177,7 @@ def step(from_room, to_room, vis, curr_path):
         return curr_path+[to_room], eff
     #killCount.append(to_room['NumPeople'])
     #to_room['NumPeople'] = 0
-    variants = [step(to_room, next_to_room, vis.copy(), curr_path+[to_room]) for next_to_room in step_variants(to_room, vis, curr_path+[to_room])]
+    variants = [step(to_room, next_to_room, vis.copy(), curr_path+[to_room]) for next_to_room in step_variants(to_room, vis.copy(), curr_path+[to_room])]
     # Выбираем самый эффективный вариант
     path, max_eff = max(variants, key = itemgetter(1)) if variants else (curr_path, 0)
     return path, max_eff + eff
@@ -173,9 +220,6 @@ for lvl in j['Level']:
             max_x = max(max_x, xy['x'])
             max_y = max(max_y, xy['y'])
 offset_x, offset_y = -min_x, -min_y
-
-# Масштаб
-scale = 10
 
 def crd(x, y):
     ''' Перевод из координат здания в координаты canvas '''
