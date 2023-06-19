@@ -19,11 +19,10 @@ old_i = i
 
 with open("test.json", 'r', encoding='utf-8') as file:
 	j = json.load(file)
-j_clear = j.copy()
 
 
 def get_total_area():
-    for level in j_clear['Level']:
+    for level in j['Level']:
         for bimEl in level['BuildElement']:
             if (bimEl['Sign'] ==  'Room' or bimEl['Sign'] == 'Staircase'):
                 totalArea.append(bimEl['Area'])
@@ -33,7 +32,7 @@ def get_total_area():
 density = NumPeople/get_total_area()
 
 def set_numpeople():
-    for level in j_clear['Level']:
+    for level in j['Level']:
         for bimEl in level['BuildElement']:
             if (bimEl['Sign'] ==  'Room' or bimEl['Sign'] == 'Staircase'):
                 bimEl['NumPeople'] = density * bimEl['Area']
@@ -160,7 +159,7 @@ def step_variants(room, vis, curr_path):
             door = get_door(room, back)
             if door and vis[door["Id"]] <= 1:
                 return [back]
-        return [] # ???
+    return []
 
 
 def step(from_room, to_room, vis, curr_path):
@@ -261,7 +260,8 @@ for i in range(len(best_path)-2):
     door1, door2 = get_door(best_path[i], best_path[i+1]), get_door(best_path[i+1], best_path[i+2])
     if door1 == door2:
         # зашёл в комнату и вышел из неё
-        door_len_path += 1 # метр, например
+        # door_len_path += 1 # метр, например
+        pass
     else:
         # расстояние между средними точками дверей
         (x1, y1), (x2, y2) = cntr_real(door1['XY'][0]["points"]), cntr_real(door2['XY'][0]["points"])
@@ -287,9 +287,12 @@ for lvl, c in cs:
         if el["Sign"] == "Room":
             c.create_text(cntr(el['XY'][0]["points"]), text=str(el.get('GLevel')) + "(" +str(int(el.get('NumPeople'))) + ")")
 
-    for i in range(len(best_path)-1):
-        if is_el_on_lvl(best_path[i], lvl) or is_el_on_lvl(best_path[i+1], lvl):
-            c.create_line(cntr(best_path[i]['XY'][0]["points"]), cntr(best_path[i+1]['XY'][0]["points"]), arrow=tkinter.LAST)
+    for i in range(len(best_path)-2):
+        if is_el_on_lvl(best_path[i], lvl) or is_el_on_lvl(best_path[i+1], lvl) or is_el_on_lvl(best_path[i+2], lvl):
+            door1, door2 = get_door(best_path[i], best_path[i+1]), get_door(best_path[i+1], best_path[i+2])
+            p1, p2 = cntr(door1['XY'][0]["points"]), cntr(door2['XY'][0]["points"])
+            c.create_line(p1, p2, fill='red')
+            c.create_text(p2, text=i, anchor='n' if best_path[i+2] in best_path[:i+2] else 's', fill="blue")
 
 
 top.mainloop()
