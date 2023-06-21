@@ -170,15 +170,15 @@ def step(from_room, to_room, vis, curr_path):
     vis[door["Id"]] += 1
     eff = to_room['NumPeople'] if vis[to_room["Id"]] == 0 else 0
     vis[to_room["Id"]] += 1
+    variants = [step(to_room, next_to_room, vis.copy(), curr_path+[to_room]) for next_to_room in step_variants(to_room, vis.copy(), curr_path+[to_room])]
     # Условия прекращения рекурсии
-    if (vis[door["Id"]] >= 3) or (to_room["GLevel"] == max_lvl) or (i < 1):
+    if not variants or (vis[door["Id"]] >= 3) or (to_room["GLevel"] == max_lvl) or (i < 1):
         print(i, end = '   \r') # чтобы не так часто
         return curr_path+[to_room], eff
     #killCount.append(to_room['NumPeople'])
     #to_room['NumPeople'] = 0
-    variants = [step(to_room, next_to_room, vis.copy(), curr_path+[to_room]) for next_to_room in step_variants(to_room, vis.copy(), curr_path+[to_room])]
     # Выбираем самый эффективный вариант
-    path, max_eff = max(variants, key = itemgetter(1)) if variants else (curr_path, 0)
+    path, max_eff = max(variants, key = itemgetter(1))
     return path, max_eff + eff
 
 
