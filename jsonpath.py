@@ -4,9 +4,6 @@ import math
 import time
 from operator import itemgetter, truediv
 
-import sys
-sys.setrecursionlimit(4000)
-
 scale = 20 # Масштаб здания в tkinter
 choosen_door = 1 # Дверь, в которую входит нарушитель
 intruder_type = 3 # Тип нарушителя
@@ -114,8 +111,7 @@ def vision(room, vis, curr_path, lvl = 0):
     elif len(curr_path) >= 3:
         ob1 = get_door(curr_path[-2], curr_path[-3])
     else:
-        print("ERROR! Intruder outside?")
-        sys.exit()
+        raise IndexError("Too small path: "+str(len(curr_path)))
     ob2 = get_door(curr_path[-1], curr_path[-2])
     curr_room_dist = distance(ob1, ob2)
     if lvl >= vision_lvl:
@@ -147,12 +143,12 @@ def step_variants(room, vis, curr_path):
             max_eff = max(visible, key=itemgetter(0))
             if max_eff[0] > 0: # если хотя бы на одном из них есть люди
                 return [max_eff[1]]
-            else:
+            #else:
                 # выбираем высокоуровневые варианты
-                hi_lev = dict_peak(v, "GLevel", True) #[max(v, key=itemgetter("GLevel"))]
+                #hi_lev = dict_peak(v, "GLevel", True) #[max(v, key=itemgetter("GLevel"))]
                 # из них можно выбрать вариант с наиболее быстро преодолеваемыми дверными проёмами
                 # а пока выберем вариант с наибольшим возможным расстоянием (наименьшее кол-во дверей за расстояние)
-                return [max(((vision(n, vis.copy(), curr_path+[n])[1], n) for n in hi_lev), key=itemgetter(0))[1]]
+                #return [max(((vision(n, vis.copy(), curr_path+[n])[1], n) for n in hi_lev), key=itemgetter(0))[1]]
 
         # если непосещённых нет, идём назад, но не назад в назад
         for back in reversed(curr_path):
