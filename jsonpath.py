@@ -40,13 +40,13 @@ def set_numpeople():
 set_numpeople()
 print(f'density {density}')
 
-def get_door(room1, room2):
+def get_door(room1, room2, return_id = False):
     if room1 == room2:
         return
     for door1 in room1["Output"]:
         for door2 in room2["Output"]:
             if door1==door2:
-                return get_el(door1)
+                return get_el(door1) if not return_id else door1
 
 def get_el(el_id):
     ''' Находит элемент по Id '''
@@ -156,8 +156,8 @@ def step_variants(room, vis, curr_path):
 
         # если непосещённых нет, идём назад, но не назад в назад
         for back in reversed(curr_path):
-            door = get_door(room, back)
-            if door and vis[door["Id"]] <= 1:
+            door_id = get_door(room, back, return_id=True)
+            if door_id and vis[door_id] == 1:
                 return [back]
     return []
 
