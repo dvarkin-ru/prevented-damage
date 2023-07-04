@@ -92,14 +92,6 @@ def cntr_real(coords):
     xy = coords["XY"][0][:-1]
     return sum((x for x, y in xy))/len(xy), sum((y for x, y in xy))/len(xy)
 
-def distance(ob1, ob2):
-    if not ob1:
-        print("NO OB1, program will crashed NOW")
-    if not ob2:
-        print("NO OB2, program will crashed NOW")
-    (x1, y1), (x2, y2) = cntr_real(ob1), cntr_real(ob2)
-    return math.sqrt((x2-x1)**2+(y2-y1)**2)
-
 def add_door(j, id1, id2):
     el1, el2 = get_el(id1), get_el(id2)
     door_id = "{0}"
@@ -129,7 +121,7 @@ def vision(room, vis, curr_path, lvl = 0):
         print("ERROR! Intruder outside?")
         sys.exit()
     ob2 = get_door(curr_path[-1], curr_path[-2])
-    curr_room_dist = distance(ob1, ob2)
+    curr_room_dist = math.dist(cntr_real(ob1), cntr_real(ob2))
     if lvl >= vision_lvl:
         return room["NumPeople"], curr_room_dist
     vis[room["Id"]] += 1
@@ -228,8 +220,7 @@ for i in range(len(best_path)-2):
         pass
     else:
         # расстояние между средними точками дверей
-        (x1, y1), (x2, y2) = cntr_real(door1), cntr_real(door2)
-        len_path += math.sqrt((x2-x1)**2+(y2-y1)**2)
+        len_path += math.dist(cntr_real(door1), cntr_real(door2))
 
 for room in best_path:
     num_victims += room["NumPeople"]
