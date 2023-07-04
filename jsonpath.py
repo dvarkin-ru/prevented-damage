@@ -10,13 +10,14 @@ sys.setrecursionlimit(4000)
 scale = 20 # Масштаб здания в tkinter
 choosen_door = 1 # Дверь, в которую входит нарушитель
 intruder_type = 1 # Тип нарушителя
+vision_lvl = 6 # дальность видимости для нарушителей 2 и 3
 i = 1000000 # Кол-во допустимых входов в рекурсивную функцию
-num_people = 335
-te = 265
+num_people = 180
+te = 167
 
 old_i = i
 
-with open("udsu_b7_L8_v1_190701.json") as file:
+with open("udsu_b3_L3_v1_190701 (1).json") as file:
 	j = json.load(file)
 
 def get_el(el_id):
@@ -58,17 +59,8 @@ def get_total_area(j):
                 total_area += room_area(e["XY"][0])
     return total_area
 
-total_area = get_total_area(j)
-density = num_people/total_area
-print("Density:", density)
-print("Total area:", total_area)
-max_lvl = 0
-visits = {}
-
-def bfs(v, Q):
+def bfs(v, Q, visits, density):
     ''' Проходимся по графу по ширине '''
-    global max_lvl
-    global visits
     if not (visits.get(v["Id"]) is None):
         return
     visits[v['Id']] = 0
@@ -82,9 +74,8 @@ def bfs(v, Q):
             #if i["Type"] == 8: # имитируем людей в крайних кабинетах
                 #i["NumPeople"] = int(abs(x2-x1) * abs(y2-y1)) # количество людей = примерная площадь
             i["NumPeople"] = room_area(i["XY"][0]) * density
-            max_lvl = max(max_lvl, i["GLevel"])
     while Q:
-        bfs(Q.pop(0), Q)
+        bfs(Q.pop(0), Q, visits, density)
 
 
 def cntr_real(coords):
@@ -110,8 +101,6 @@ def add_door(j, id1, id2):
 
 # add_door(j, "{deb2ccb8-43ea-465e-a3ee-e54affced3a9}", "{58f01831-e806-4437-894c-a2cdcd3f239e}")
 
-vision_lvl = 6
-
 def vision(room, vis, curr_path, lvl = 0):
     if len(curr_path) == 2: # в пути только 2 помещения, не можем взять 2 двери
         ob1 = top_room
@@ -135,12 +124,12 @@ def dict_peak(d, key, reverse):
     d = sorted(d, key=itemgetter(key), reverse=reverse)
     return [i for i in d if i[key] == d[0][key]]
 
-def step_variants(room, vis, curr_path):
+def step_variants(room, vis, curr_path, disabled_rooms):
     if intruder_type == 1:
-        return [n for n in neighbours(room) if n["GLevel"] == room["GLevel"]+1]
+        return [n for n in neighbours(room) if n["GLevel"] == room["GLevel"]+1 and n not in disabled_rooms]
     elif intruder_type in (2, 3):
         # Варианты перехода во все непосещённые помещения
-        v = [n for n in neighbours(room) if vis[n["Id"]] == 0]
+        v = [n for n in neighbours(room) if vis[n["Id"]] == 0 and n not in disabled_rooms]
         if intruder_type == 3:
             # Нарушитель типа 3 предпочтёт путь с наибольшим уроном за время
             visible = [(truediv(*vision(n, vis.copy(), curr_path+[n])), n) for n in v]
@@ -165,7 +154,7 @@ def step_variants(room, vis, curr_path):
                 return [back]
         return [] # ???
 
-def step(from_room, to_room, vis, curr_path):
+def step(from_room, to_room, vis, curr_path, disabled_rooms, max_lvl):
     ''' Рекурсивная функция '''
     global i
     i -= 1
@@ -173,7 +162,7 @@ def step(from_room, to_room, vis, curr_path):
     vis[door["Id"]] += 1
     vis[to_room["Id"]] += 1
     eff = to_room['NumPeople']
-    variants = [step(to_room, next_to_room, vis.copy(), curr_path+[to_room]) for next_to_room in step_variants(to_room, vis.copy(), curr_path+[to_room])]
+    variants = [step(to_room, next_to_room, vis.copy(), curr_path+[to_room], disabled_rooms, max_lvl) for next_to_room in step_variants(to_room, vis.copy(), curr_path+[to_room], disabled_rooms)]
     # Условия прекращения рекурсии
     if not variants or vis[door["Id"]] >= 3 or to_room["GLevel"] == max_lvl or i < 1:
         return curr_path+[to_room], eff
@@ -181,55 +170,68 @@ def step(from_room, to_room, vis, curr_path):
     path, max_eff = max(variants, key = itemgetter(1))
     return path, max_eff + eff
 
+def get_out_doors(j):
+    ''' Ищем входные двери'''
+    return [el for lvl in j['Level'] for el in lvl['BuildElement'] if el['Sign'] == "DoorWayOut"]
 
-# ищем входные двери
-out_doors = []
-for el in j['Level'][0]['BuildElement']:
-    if el['Sign'] == "DoorWayOut":
-        out_doors.append(el)
+def intruder(j, top_door, top_room, disabled_rooms = []):
+    # находим лучшие путь и эффективность пути
+    max_lvl = max((e["GLevel"] for lvl in j['Level'] for e in lvl['BuildElement'] if e.get("GLevel")))
+    print("Max level:", max_lvl)
+    t1 = time.time()
+    visits = {e['Id']: 0 for lvl in j['Level'] for e in lvl['BuildElement']}
+    best_path, best_eff = step(get_el(top_door["Id"]), top_room, visits, [], disabled_rooms, max_lvl)
+    t2 = time.time()
+    if i < 1:
+        print("[Interrupted]")
+    print("Time:", t2-t1, " i:", old_i-i)
+    print(int((old_i-i)/(t2-t1)), "steps per second")
+    return best_path
 
-# заходим в одну, делаем помещение за ней верхушкой
-top_door = out_doors[choosen_door]
-top_room = get_el(top_door['Output'][0])
-top_room["GLevel"] = 0
+def gen_3_paths(choosen_door):
+    total_area = get_total_area(j)
+    density = num_people/total_area
+    print("Density:", density)
+    print("Total area:", total_area)
+    # заходим в одну, делаем помещение за ней верхушкой
+    top_door = get_out_doors(j)[choosen_door]
+    top_room = get_el(top_door['Output'][0])
+    top_room["GLevel"] = 0
 
-bfs(top_room, [])
-print("Max level:", max_lvl)
-for lvl in j['Level']:
-    for e in lvl['BuildElement']:
-        visits[e['Id']] = 0
+    bfs(top_room, [], {}, density)
+    paths = []
+    for path_num in range(3):
+        end_paths = [p[-1] for p in paths]
+        p = intruder(j, top_door, top_room, end_paths)
 
-# находим лучшие путь и эффективность пути
-t1 = time.time()
-best_path, best_eff = step(get_el(top_door["Id"]), top_room, visits, [])
-t2 = time.time()
-if i < 1:
-    print("[Interrupted]")
-print("Time:", t2-t1, " i:", old_i-i)
-print(int((old_i-i)/(t2-t1)), "steps per second")
+        # print(*[str(v["Id"])+'\n' for v in best_path])
+        time = []
+        len_path = 0
+        num_victims = 0
+        for i in range(len(p)-2):
+            door1, door2 = get_door(p[i], p[i+1]), get_door(p[i+1], p[i+2])
+            if door1 == door2:
+                # зашёл в комнату и вышел из неё
+                # door_len_path += 1 # метр, например
+                pass
+            else:
+                # расстояние между средними точками дверей
+                len_path += math.dist(cntr_real(door1), cntr_real(door2))
 
-# print(*[str(v["Id"])+'\n' for v in best_path])
-time = []
-len_path = 0
-num_victims = 0
-for i in range(len(best_path)-2):
-    door1, door2 = get_door(best_path[i], best_path[i+1]), get_door(best_path[i+1], best_path[i+2])
-    if door1 == door2:
-        # зашёл в комнату и вышел из неё
-        # door_len_path += 1 # метр, например
-        pass
-    else:
-        # расстояние между средними точками дверей
-        len_path += math.dist(cntr_real(door1), cntr_real(door2))
+        for room in p:
+            num_victims += room["NumPeople"]
+        
+        paths += [p]
+        print("Информация, ПУТЬ ", path_num)
+        print("Длина пути по дверям:", len_path)
+        print("Количество жертв:", num_victims)
+        t_intruder = 100/60*len_path
+        print("Время нарушителя:", t_intruder)
+        print("Отношение к Te:", t_intruder/te)
+    return paths
 
-for room in best_path:
-    num_victims += room["NumPeople"]
-
-print("Длина пути по дверям:", len_path)
-print("Количество жертв:", num_victims)
-t_intruder = 100/60*len_path
-print("Время нарушителя:", t_intruder)
-print("Отношение к Te:", t_intruder/te)
+paths = gen_3_paths(choosen_door)
+best_path = paths[-1]
 
 # находим offset для canvas
 min_x, min_y, max_x, max_y = 0, 0, 0, 0
@@ -273,6 +275,7 @@ for lvl in j["Level"]:
 
 # Рисуем
 colors = {"Room": "", "DoorWayInt": "yellow", "DoorWayOut": "brown", "DoorWay": "", "Staircase": "green"}
+path_colors = ("red", "green", "blue")
 for lvl, c in cs:
     for el in lvl['BuildElement']:
         for xy in el['XY']:
@@ -280,12 +283,12 @@ for lvl, c in cs:
             c.tag_bind(p, "<Button-1>", lambda e, el_id=el['Id']: print(el_id))
         if el["Sign"] == "Room":
             c.create_text(cntr(el['XY']), text=str(el.get('GLevel'))+"("+str(int(el.get('NumPeople')))+")")
-
-    for i in range(len(best_path)-1):
-        if is_el_on_lvl(best_path[i], lvl) or is_el_on_lvl(best_path[i+1], lvl):
-            c.create_line(cntr(best_path[i]['XY']), cntr(best_path[i+1]['XY']), arrow=tkinter.LAST)
-    if is_el_on_lvl(best_path[-1], lvl):
-        c.create_text([i+12 for i in cntr(best_path[-1]['XY'])], text="BREAK") # окончание пути, смещённое на 12 точек
+    for i, path in enumerate(paths): 
+        for path_from, path_to in zip(path, path[1:]):
+            if is_el_on_lvl(path_from, lvl) or is_el_on_lvl(path_to, lvl):
+                c.create_line(cntr(path_from['XY']), cntr(path_to['XY']), arrow=tkinter.LAST, fill=path_colors[i])
+        if is_el_on_lvl(path[-1], lvl):
+            c.create_text([i+12 for i in cntr(path[-1]['XY'])], text="BREAK") # окончание пути, смещённое на 12 точек
 
 
 top.mainloop()
