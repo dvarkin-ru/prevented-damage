@@ -9,12 +9,14 @@ sys.setrecursionlimit(4000)
 
 scale = 20 # Масштаб здания в tkinter
 choosen_door = 1 # Дверь, в которую входит нарушитель
-intruder_type = 3 # Тип нарушителя
+intruder_type = 1 # Тип нарушителя
 i = 1000000 # Кол-во допустимых входов в рекурсивную функцию
+num_people = 335
+te = 265
 
 old_i = i
 
-with open("udsu_b3_L3_v1_190701.json") as file:
+with open("udsu_b7_L8_v1_190701.json") as file:
 	j = json.load(file)
 
 def get_el(el_id):
@@ -45,6 +47,21 @@ def neighbours(start_room):
     ''' Находит соседние через DoorWayInt комнаты у данной комнаты, возвращает generator :) '''
     return (get_el(room_id) for door_id in start_room["Output"] if get_el(door_id)['Sign'] in ('DoorWayInt', 'DoorWay') for room_id in get_el(door_id)["Output"] if room_id != start_room["Id"])
 
+def room_area(xy):
+    return math.fabs(0.5 * sum((x1*y2-x2*y1 for (x1, y1), (x2, y2) in zip(xy, xy[1:]+[xy[0]]))))
+
+def get_total_area(j):
+    total_area = 0.0
+    for lvl in j['Level']:
+        for e in lvl['BuildElement']:
+            if e['Sign'] in ("Room", "Staircase"):
+                total_area += room_area(e["XY"][0])
+    return total_area
+
+total_area = get_total_area(j)
+density = num_people/total_area
+print("Density:", density)
+print("Total area:", total_area)
 max_lvl = 0
 visits = {}
 
@@ -61,9 +78,10 @@ def bfs(v, Q):
         if visits.get(i['Id']) is None:
             Q.append(i)
             i["GLevel"] = v["GLevel"]+1
-            x1, y1, x2, y2 = *i["XY"][0][0], *i["XY"][0][2]
-            if i["Type"] == 8: # имитируем людей в крайних кабинетах
-                i["NumPeople"] = int(abs(x2-x1) * abs(y2-y1)) # количество людей = примерная площадь
+            #x1, y1, x2, y2 = *i["XY"][0][0], *i["XY"][0][2]
+            #if i["Type"] == 8: # имитируем людей в крайних кабинетах
+                #i["NumPeople"] = int(abs(x2-x1) * abs(y2-y1)) # количество людей = примерная площадь
+            i["NumPeople"] = room_area(i["XY"][0]) * density
             max_lvl = max(max_lvl, i["GLevel"])
     while Q:
         bfs(Q.pop(0), Q)
@@ -81,6 +99,24 @@ def distance(ob1, ob2):
         print("NO OB2, program will crashed NOW")
     (x1, y1), (x2, y2) = cntr_real(ob1), cntr_real(ob2)
     return math.sqrt((x2-x1)**2+(y2-y1)**2)
+
+def add_door(j, id1, id2):
+    el1, el2 = get_el(id1), get_el(id2)
+    door_id = "{0}"
+    el1["Output"].append(door_id)
+    el2["Output"].append(door_id)
+    lvl = None
+    for lvl_j in j['Level']:
+        if is_el_on_lvl(el1, lvl_j):
+            lvl = lvl_j
+    if not lvl:
+        print("Wrong id!")
+        return
+    xy1, xy3 = cntr_real(el1), cntr_real(el2)
+    xy2, xy4 = (xy1[0], xy3[1]), (xy3[0], xy1[1])
+    lvl['BuildElement'].append({"Id": door_id, "Sign": "DoorWay", "XY": [(xy1, xy2, xy3, xy4, xy1),], "Output": [id1, id2]})
+
+# add_door(j, "{deb2ccb8-43ea-465e-a3ee-e54affced3a9}", "{58f01831-e806-4437-894c-a2cdcd3f239e}")
 
 vision_lvl = 6
 
@@ -181,6 +217,28 @@ print("Time:", t2-t1, " i:", old_i-i)
 print(int((old_i-i)/(t2-t1)), "steps per second")
 
 # print(*[str(v["Id"])+'\n' for v in best_path])
+time = []
+len_path = 0
+num_victims = 0
+for i in range(len(best_path)-2):
+    door1, door2 = get_door(best_path[i], best_path[i+1]), get_door(best_path[i+1], best_path[i+2])
+    if door1 == door2:
+        # зашёл в комнату и вышел из неё
+        # door_len_path += 1 # метр, например
+        pass
+    else:
+        # расстояние между средними точками дверей
+        (x1, y1), (x2, y2) = cntr_real(door1), cntr_real(door2)
+        len_path += math.sqrt((x2-x1)**2+(y2-y1)**2)
+
+for room in best_path:
+    num_victims += room["NumPeople"]
+
+print("Длина пути по дверям:", len_path)
+print("Количество жертв:", num_victims)
+t_intruder = 100/60*len_path
+print("Время нарушителя:", t_intruder)
+print("Отношение к Te:", t_intruder/te)
 
 # находим offset для canvas
 min_x, min_y, max_x, max_y = 0, 0, 0, 0
@@ -229,7 +287,7 @@ for lvl, c in cs:
         for xy in el['XY']:
             c.create_polygon([crd(x,y) for x, y in xy[:-1]], fill=colors[el['Sign']], outline='black')
         if el["Sign"] == "Room":
-            c.create_text(cntr(el['XY']), text=str(int(el.get('GLevel')))+"("+str(int(el.get('NumPeople')))+")")
+            c.create_text(cntr(el['XY']), text=str(el.get('GLevel'))+"("+str(int(el.get('NumPeople')))+")")
 
     for i in range(len(best_path)-1):
         if is_el_on_lvl(best_path[i], lvl) or is_el_on_lvl(best_path[i+1], lvl):
