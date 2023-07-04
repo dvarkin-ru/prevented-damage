@@ -285,7 +285,8 @@ colors = {"Room": "", "DoorWayInt": "yellow", "DoorWayOut": "brown", "DoorWay": 
 for lvl, c in cs:
     for el in lvl['BuildElement']:
         for xy in el['XY']:
-            c.create_polygon([crd(x,y) for x, y in xy[:-1]], fill=colors[el['Sign']], outline='black')
+            p = c.create_polygon([crd(x,y) for x, y in xy[:-1]], fill=colors[el['Sign']], outline='black')
+            c.tag_bind(p, "<Button-1>", lambda e, el_id=el['Id']: print(el_id))
         if el["Sign"] == "Room":
             c.create_text(cntr(el['XY']), text=str(el.get('GLevel'))+"("+str(int(el.get('NumPeople')))+")")
 
