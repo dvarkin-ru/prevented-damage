@@ -6,18 +6,26 @@ from operator import itemgetter, truediv
 import sys
 sys.setrecursionlimit(4000)
 
+# Имя файла, название теста, число людей в помещении, время эвакуации, номер входной двери
+tests = (("udsu_b1_L4_v1_190701 (1).json", "1.1", 617, 226, 1),
+         ("udsu_b2_L4_v1_190701.json", "2.1", 749, 233, 9),
+         ("udsu_b3_L3_v1_190701 (1).json", "3.1", 180, 167, 1),
+         ("udsu_b4_L5_v1_190701.json", "4.1", 1135, 335, 2),
+         ("udsu_b5_L4_v1_200102.json", "5.1", 159, 247, 4),
+         ("udsu_b7_L8_v1_190701.json", "7.2", 335, 265, 1))
+test_num = 2
 
 scale = 20 # Масштаб здания в tkinter
-choosen_door = 1 # Дверь, в которую входит нарушитель
+choosen_door = tests[test_num][4] # Дверь, в которую входит нарушитель
 intruder_type = 1 # Тип нарушителя
 vision_lvl = 6 # дальность видимости для нарушителей 2 и 3
 i = 1000000 # Кол-во допустимых входов в рекурсивную функцию
-num_people = 180
-te = 167
+num_people = tests[test_num][2]
+te = tests[test_num][3]
 
 old_i = i
 
-with open("udsu_b3_L3_v1_190701 (1).json") as file:
+with open(tests[test_num][0]) as file:
 	j = json.load(file)
 
 def get_el(el_id):
@@ -177,22 +185,20 @@ def get_out_doors(j):
 def intruder(j, top_door, top_room, disabled_rooms = []):
     # находим лучшие путь и эффективность пути
     max_lvl = max((e["GLevel"] for lvl in j['Level'] for e in lvl['BuildElement'] if e.get("GLevel")))
-    print("Max level:", max_lvl)
+    # print("Max level:", max_lvl)
     t1 = time.time()
     visits = {e['Id']: 0 for lvl in j['Level'] for e in lvl['BuildElement']}
     best_path, best_eff = step(get_el(top_door["Id"]), top_room, visits, [], disabled_rooms, max_lvl)
     t2 = time.time()
     if i < 1:
         print("[Interrupted]")
-    print("Time:", t2-t1, " i:", old_i-i)
-    print(int((old_i-i)/(t2-t1)), "steps per second")
+    # print("Time:", t2-t1, " i:", old_i-i)
+    # print(int((old_i-i)/(t2-t1)), "steps per second")
     return best_path
 
 def gen_3_paths(choosen_door):
     total_area = get_total_area(j)
     density = num_people/total_area
-    print("Density:", density)
-    print("Total area:", total_area)
     # заходим в одну, делаем помещение за ней верхушкой
     top_door = get_out_doors(j)[choosen_door]
     top_room = get_el(top_door['Output'][0])
@@ -206,7 +212,7 @@ def gen_3_paths(choosen_door):
 
         # print(*[str(v["Id"])+'\n' for v in best_path])
         time = []
-        len_path = 0
+        len_path = math.dist(cntr_real(top_door), cntr_real(get_door(p[0], p[1]))) if len(p)>0 else 0
         num_victims = 0
         for i in range(len(p)-2):
             door1, door2 = get_door(p[i], p[i+1]), get_door(p[i+1], p[i+2])
@@ -222,12 +228,15 @@ def gen_3_paths(choosen_door):
             num_victims += room["NumPeople"]
         
         paths += [p]
-        print("Информация, ПУТЬ ", path_num)
-        print("Длина пути по дверям:", len_path)
-        print("Количество жертв:", num_victims)
+        print("Информация, ПУТЬ", tests[test_num][1], path_num+1)
+        # print("Длина пути по дверям:", len_path)
         t_intruder = 100/60*len_path
         print("Время нарушителя:", t_intruder)
         print("Отношение к Te:", t_intruder/te)
+        print("Площадь:", total_area)
+        print("Плотность:", density)
+        print("Количество жертв:", num_victims)
+        print()
     return paths
 
 paths = gen_3_paths(choosen_door)
