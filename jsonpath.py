@@ -48,7 +48,7 @@ def neighbours(start_room):
     return (get_el(room_id) for door_id in start_room["Output"] if get_el(door_id)['Sign'] in ('DoorWayInt', 'DoorWay') for room_id in get_el(door_id)["Output"] if room_id != start_room["Id"])
 
 def room_area(xy):
-    return math.fabs(0.5 * sum((x1*y2-x2*y1 for (x1, y1), (x2, y2) in zip(xy, xy[1:]+[xy[0]]))))
+    return math.fabs(0.5*sum((x1*y2-x2*y1 for (x1,y1),(x2,y2) in zip(xy, xy[1:]+xy[:1]))))
 
 def get_total_area(j):
     total_area = 0.0
