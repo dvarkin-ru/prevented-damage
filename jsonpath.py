@@ -231,17 +231,18 @@ def gen_3_paths(choosen_door):
             else:
                 # расстояние между средними точками дверей
                 len_path += math.dist(cntr_real(door1), cntr_real(door2))
-
+        path_area = 0
         for room in p:
             num_victims += room["NumPeople"]
+            path_area += room_area(room['XY'][0])
         
         paths += [p]
         print("Информация, ПУТЬ", tests[test_num][1], path_num+1)
-        # print("Длина пути по дверям:", len_path)
+        print("Длина пути по дверям:", len_path)
         t_intruder = 100/60*len_path
         print("Время нарушителя:", t_intruder)
         print("Отношение к Te:", t_intruder/te)
-        print("Площадь:", total_area)
+        print("Площадь:", path_area)
         print("Плотность:", density)
         print("Количество жертв:", num_victims)
         print()
