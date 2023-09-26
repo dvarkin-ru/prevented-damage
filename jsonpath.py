@@ -3,8 +3,6 @@ import tkinter
 import math
 import time
 from operator import itemgetter, truediv
-import sys
-sys.setrecursionlimit(4000)
 
 # Имя файла, название теста, число людей в помещении, время эвакуации, номер входной двери
 tests = (("udsu_b1_L4_v1_190701 (1).json", "1.1", 617, 226, 1),
@@ -12,10 +10,11 @@ tests = (("udsu_b1_L4_v1_190701 (1).json", "1.1", 617, 226, 1),
          ("udsu_b3_L3_v1_190701 (1).json", "3.1", 180, 167, 1),
          ("udsu_b4_L5_v1_190701.json", "4.1", 1135, 335, 2),
          ("udsu_b5_L4_v1_200102.json", "5.1", 159, 247, 4),
-         ("udsu_b7_L8_v1_190701.json", "7.2", 335, 265, 1))
-test_num = 2
+         ("udsu_b7_L8_v1_190701.json", "7.2", 335, 265, 1),
+         ("test3.json", "School", 159, 247, 0))
+test_num = 6
 
-scale = 20 # Масштаб здания в tkinter
+scale = 15 # Масштаб здания в tkinter
 choosen_door = tests[test_num][4] # Дверь, в которую входит нарушитель
 intruder_type = 1 # Тип нарушителя
 vision_lvl = 6 # дальность видимости для нарушителей 2 и 3
@@ -56,7 +55,15 @@ def neighbours(start_room):
     ''' Находит соседние через DoorWayInt комнаты у данной комнаты, возвращает generator :) '''
     return (get_el(room_id) for door_id in start_room["Output"] if get_el(door_id)['Sign'] in ('DoorWayInt', 'DoorWay') for room_id in get_el(door_id)["Output"] if room_id != start_room["Id"])
 
-def room_area(xy):
+def points(el):
+    if "points" in el["XY"][0]:
+        return [(xy["x"]/1000, xy["y"]/1000) for xy in el["XY"][0]["points"]]
+    else:
+        return el["XY"][0][:-1]
+
+def room_area(el):
+    # print(xy)
+    xy = points(el)
     return math.fabs(0.5*sum((x1*y2-x2*y1 for (x1,y1),(x2,y2) in zip(xy, xy[1:]+xy[:1]))))
 
 def get_total_area(j):
@@ -64,7 +71,7 @@ def get_total_area(j):
     for lvl in j['Level']:
         for e in lvl['BuildElement']:
             if e['Sign'] in ("Room", "Staircase"):
-                total_area += room_area(e["XY"][0])
+                total_area += room_area(e)
     return total_area
 
 def bfs(v, Q, visits, density):
@@ -81,14 +88,14 @@ def bfs(v, Q, visits, density):
             #x1, y1, x2, y2 = *i["XY"][0][0], *i["XY"][0][2]
             #if i["Type"] == 8: # имитируем людей в крайних кабинетах
                 #i["NumPeople"] = int(abs(x2-x1) * abs(y2-y1)) # количество людей = примерная площадь
-            i["NumPeople"] = room_area(i["XY"][0]) * density
+    v["NumPeople"] = room_area(v) * density
     while Q:
         bfs(Q.pop(0), Q, visits, density)
 
 
-def cntr_real(coords):
+def cntr_real(el):
     ''' Центр в координатах здания '''
-    xy = coords["XY"][0][:-1]
+    xy = points(el)
     return sum((x for x, y in xy))/len(xy), sum((y for x, y in xy))/len(xy)
 
 def add_door(j, id1, id2):
@@ -105,6 +112,7 @@ def add_door(j, id1, id2):
         return
     xy1, xy3 = cntr_real(el1), cntr_real(el2)
     xy2, xy4 = (xy1[0], xy3[1]), (xy3[0], xy1[1])
+    # TODO: json: if "points" in ...
     lvl['BuildElement'].append({"Id": door_id, "Sign": "DoorWay", "XY": [(xy1, xy2, xy3, xy4, xy1),], "Output": [id1, id2]})
 
 # add_door(j, "{deb2ccb8-43ea-465e-a3ee-e54affced3a9}", "{58f01831-e806-4437-894c-a2cdcd3f239e}")
@@ -246,21 +254,20 @@ best_path = paths[-1]
 min_x, min_y, max_x, max_y = 0, 0, 0, 0
 for lvl in j['Level']:
     for el in lvl['BuildElement']:
-        for xy in el['XY']:
-            for x, y in xy:
-                min_x = min(min_x, x)
-                min_y = min(min_y, y)
-                max_x = max(max_x, x)
-                max_y = max(max_y, y)
+        for x, y in points(el):
+            min_x = min(min_x, x)
+            min_y = min(min_y, y)
+            max_x = max(max_x, x)
+            max_y = max(max_y, y)
 offset_x, offset_y = -min_x, -min_y
 
 def crd(x, y):
     ''' Перевод из координат здания в координаты canvas '''
     return (x+offset_x)*scale, (y+offset_y)*scale
 
-def cntr(coords):
+def cntr(el):
     ''' Центр для canvas по координатам здания '''
-    xy = [crd(x, y) for xy in coords for x, y in xy[:-1]]
+    xy = [crd(x, y) for x, y in points(el)]
     return sum((x for x, y in xy))/len(xy), sum((y for x, y in xy))/len(xy)
 
 
@@ -268,7 +275,7 @@ def cntr(coords):
 cs = []
 for lvl in j["Level"]:
     top = tkinter.Tk()
-    top.title(lvl['NameLevel'])
+    top.title(lvl.get('NameLevel') or lvl.get('Name'))
     frame=tkinter.Frame(top)
     frame.pack(expand=True, fill=tkinter.BOTH)
     c = tkinter.Canvas(frame, scrollregion=(*crd(min_x, min_y), *crd(max_x, max_y)))
@@ -287,17 +294,16 @@ colors = {"Room": "", "DoorWayInt": "yellow", "DoorWayOut": "brown", "DoorWay": 
 path_colors = ("red", "green", "blue")
 for lvl, c in cs:
     for el in lvl['BuildElement']:
-        for xy in el['XY']:
-            p = c.create_polygon([crd(x,y) for x, y in xy[:-1]], fill=colors[el['Sign']], outline='black')
-            c.tag_bind(p, "<Button-1>", lambda e, el_id=el['Id']: print(el_id))
+        p = c.create_polygon([crd(x,y) for x, y in points(el)], fill=colors[el['Sign']], outline='black')
+        c.tag_bind(p, "<Button-1>", lambda e, el_id=el['Id']: print(el_id))
         if el["Sign"] == "Room":
-            c.create_text(cntr(el['XY']), text=str(el.get('GLevel'))+"("+str(int(el.get('NumPeople')))+")")
+            c.create_text(cntr(el), text=str(el.get('GLevel'))+"("+str(int(el.get('NumPeople') or 0))+")")
     for i, path in enumerate(paths): 
         for path_from, path_to in zip(path, path[1:]):
             if is_el_on_lvl(path_from, lvl) or is_el_on_lvl(path_to, lvl):
-                c.create_line(cntr(path_from['XY']), cntr(path_to['XY']), arrow=tkinter.LAST, fill=path_colors[i])
+                c.create_line(cntr(path_from), cntr(path_to), arrow=tkinter.LAST, fill=path_colors[i])
         if is_el_on_lvl(path[-1], lvl):
-            c.create_text([i+12 for i in cntr(path[-1]['XY'])], text="BREAK") # окончание пути, смещённое на 12 точек
+            c.create_text([i+12 for i in cntr(path[-1])], text="BREAK") # окончание пути, смещённое на 12 точек
 
 
 top.mainloop()
