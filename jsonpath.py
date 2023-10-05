@@ -57,7 +57,7 @@ def neighbours(start_room):
 
 def points(el):
     if "points" in el["XY"][0]:
-        return [(xy["x"]/1000, xy["y"]/1000) for xy in el["XY"][0]["points"]]
+        return [(xy["x"], xy["y"]) for xy in el["XY"][0]["points"]]
     else:
         return el["XY"][0][:-1]
 
@@ -234,7 +234,7 @@ def gen_3_paths(choosen_door):
         path_area = 0
         for room in p:
             num_victims += room["NumPeople"]
-            path_area += room_area(room['XY'][0])
+            path_area += room_area(room)
         
         paths += [p]
         print("Информация, ПУТЬ", tests[test_num][1], path_num+1)
